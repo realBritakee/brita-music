@@ -2,6 +2,23 @@
 
 All notable changes to this project. Newest first.
 
+## 2026-11-06 - Version 0.2.1 test build and first GitHub push
+
+### Added
+- [README.md](README.md) and [.gitignore](.gitignore) (leaves out `node_modules/`, `out/`, `dist/`, logs, `.env` files); the project was pushed to https://github.com/realBritakee/brita-music as commit `35a2ac9` on `main` (82 files, no secrets found). The repository had no commit before, so GitHub could not create a release.
+- Test build `Brita-Music-Setup-0.2.1.exe` with `.blockmap` and `latest.yml` in `dist/build-0.2.1`, only to test the updater over an installed 0.2.0; the program is the same as 0.2.0.
+- Safe copy of the 0.2.0 release files in `dist/release-0.2.0`, because a new build overwrites `latest.yml`.
+
+### Changed
+- [package.json](package.json) version is 0.2.1 (not committed yet).
+
+### Did not work
+- `npm run dist` failed twice with `EBUSY` on `dist\win-unpacked\resources\app.asar`; no Brita Music process held it and the cause is unknown (unverified). Building with `electron-builder -c.directories.output=dist/build-0.2.1` worked.
+
+### Open
+- Release `v0.2.0` is not published yet (Chris uploads it). The updater test (publish `v0.2.1`, restart 0.2.0, press Update) has not been run; the real GitHub update path is still unverified.
+- `dist/win-unpacked` may stay locked; a later `npm run dist` may fail the same way.
+
 ## 2026-11-06 - Brita Music version 0.2.0, steps 7 to 19
 
 ### Added
