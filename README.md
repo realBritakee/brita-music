@@ -30,4 +30,4 @@ npm run test:app   # self-driving app check
 npm run dist       # build the installer into dist/
 ```
 
-Built with Electron, React, TypeScript, Zustand and `music-metadata`. The look follows [DESIGN.md](DESIGN.md); plans and history are in [PLAN.md](PLAN.md) and [Changelog.md](Changelog.md).
+Built with Electron, React, TypeScript, Zustand and `music-metadata`.
