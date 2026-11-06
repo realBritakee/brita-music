@@ -1,0 +1,74 @@
+/* Brita Music theme: colours, fonts and shapes taken from the DMZ site (DMZ/site/src/styles/theme.css).
+   Greys, orange accent, square corners, uppercase Saira headings. Fonts are local files only. */
+
+@font-face {
+  font-family: 'Saira';
+  src: url('./fonts/Saira/saira-latin-wght-normal.woff2') format('woff2');
+  font-weight: 100 900; font-style: normal; font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Saira';
+  src: url('./fonts/Saira/saira-latin-ext-wght-normal.woff2') format('woff2');
+  font-weight: 100 900; font-style: normal; font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('./fonts/JetBrainsMono/jetbrains-mono-latin-wght-normal.woff2') format('woff2');
+  font-weight: 100 800; font-style: normal; font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('./fonts/JetBrainsMono/jetbrains-mono-latin-ext-wght-normal.woff2') format('woff2');
+  font-weight: 100 800; font-style: normal; font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+  --bg: #1B1B1B;
+  --raised: #202020;
+  --surface: #252525;
+  --surface-hover: #2D2D2D;
+  --border: #353535;
+  --border-strong: #4A4A4A;
+  --accent: #FF6F00;
+  --accent-hover: #FF8A2E;
+  --accent-tint: #2A1B0E;
+  --accent-line: rgba(255, 111, 0, 0.38);
+  --accent-soft: rgba(255, 111, 0, 0.14);
+  --text: #FFFFFF;
+  --text-2: #A1A1AA;
+  --text-3: #8F8F97;
+  --on-accent: #111114;
+  --err: #F87171;     --err-bg: #4D1A1A;
+  --warn: #F59E0B;    --warn-bg: #3A2A0C;
+
+  --rad-sm: 2px;
+  --f-ui: 'Saira', sans-serif;
+  --f-head: 'Saira', sans-serif;
+  --head-track: 0.03em;
+
+  --side-w: 248px;
+  --player-h: 88px;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--f-ui); font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; overflow: hidden; }
+button { font: inherit; color: inherit; cursor: pointer; }
+h1 { margin: 0; line-height: 1.1; font-family: var(--f-head); font-weight: 900; text-transform: uppercase; letter-spacing: var(--head-track); }
+p { margin: 0; }
+ol { margin: 0; padding: 0; list-style: none; }
+svg { display: block; }
+::selection { background: rgba(255, 111, 0, 0.35); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--rad-sm); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 0; border: 2px solid var(--bg); }
+::-webkit-scrollbar-track { background: transparent; }
+
+.i { width: 1.1em; height: 1.1em; stroke-width: 2; flex: none; }
+.muted { color: var(--text-2); }
+.dim { color: var(--text-3); }

@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Build output (the installer is published as a GitHub release, not committed)
+out/
+dist/
+
+# Logs and temporary files
+*.log
+*.tmp
+npm-debug.log*
+
+# Local environment files
+.env
+.env.*
+
+# Editor and system files
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
