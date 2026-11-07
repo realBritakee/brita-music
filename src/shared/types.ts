@@ -134,6 +134,29 @@ export interface BrowserBounds {
 
 export type BrowserMove = 'back' | 'forward' | 'reload'
 
+/** The video that plays in the Download page's browser, as the page reports it. */
+export interface VideoState {
+  title: string
+  playing: boolean
+  time: number
+  duration: number
+  volume: number
+  muted: boolean
+  /** YouTube offers a next (or previous) video on this page. */
+  canNext: boolean
+  canPrevious: boolean
+}
+
+/** What the player bar, the media keys and the taskbar buttons can ask the video to do. */
+export type VideoCommand =
+  | { type: 'toggle' }
+  | { type: 'pause' }
+  | { type: 'mute' }
+  | { type: 'next' }
+  | { type: 'previous' }
+  | { type: 'seek'; seconds: number }
+  | { type: 'volume'; volume: number }
+
 export interface BritaApi {
   /** The remembered library, at once. The fresh one follows through onLibrary. */
   loadLibrary(): Promise<Library>
@@ -183,6 +206,10 @@ export interface BritaApi {
   moveBrowser(move: BrowserMove): void
   /** Opens the typed text in the browser view: a web address as it is, other words as a YouTube search. False if it cannot be opened. */
   goBrowser(text: string): Promise<boolean>
+  /** Tells the video in the browser what to do (play or pause, seek, volume, next, previous). */
+  controlVideo(command: VideoCommand): void
+  /** The video in the browser, about twice a second while there is one; null when there is none. */
+  onVideo(listener: (state: VideoState | null) => void): () => void
   browserState(): Promise<BrowserState>
   onBrowser(listener: (state: BrowserState) => void): () => void
   /** Tells the tray menu, the taskbar and the mini player whether music plays and which song is loaded. */

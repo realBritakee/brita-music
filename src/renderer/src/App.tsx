@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import {
   ArrowDown, ArrowUp, ArrowUpToLine, Check, Copy, Disc3, Download as DownloadIcon, FolderOpen, FolderPlus, Heart, History, Library as LibraryIcon, ListEnd, ListMusic, ListOrdered, ListPlus, Music,
   Moon, Pause, PictureInPicture2, Play, RefreshCw, Repeat, Repeat1, Search, Settings as SettingsIcon, Shuffle, SkipBack, SkipForward, Speaker, User, Volume1, Volume2,
-  TrendingUp, VolumeX, X, type LucideIcon,
+  TrendingUp, Video, VolumeX, X, type LucideIcon,
 } from 'lucide-react'
 import type { Song } from '../../shared/types'
 import { FAVORITES_VIEW } from './favorites'
@@ -803,13 +803,15 @@ function SongList() {
 
 function PlayerBar() {
   const current = useMusic((state) => state.current)
-  const playing = useMusic((state) => state.playing)
-  const time = useMusic((state) => state.time)
-  const duration = useMusic((state) => state.duration)
+  const musicPlaying = useMusic((state) => state.playing)
+  const musicTime = useMusic((state) => state.time)
+  const musicDuration = useMusic((state) => state.duration)
   const playError = useMusic((state) => state.playError)
   const notice = useMusic((state) => state.notice)
   const shuffle = useMusic((state) => state.shuffle)
   const repeat = useMusic((state) => state.repeat)
+  const source = useMusic((state) => state.source)
+  const video = useMusic((state) => state.video)
   const togglePlay = useMusic((state) => state.togglePlay)
   const next = useMusic((state) => state.next)
   const previous = useMusic((state) => state.previous)
@@ -817,36 +819,46 @@ function PlayerBar() {
   const toggleShuffle = useMusic((state) => state.toggleShuffle)
   const cycleRepeat = useMusic((state) => state.cycleRepeat)
 
-  const noSong = current === null
-  const disabled = noSong || playError !== null
+  // With a video on, the bar shows and controls the video; shuffle and repeat belong to the music.
+  const watching = source === 'video' && video !== null
+  const playing = watching ? video.playing : musicPlaying
+  const time = watching ? video.time : musicTime
+  const duration = watching ? video.duration : musicDuration
+  const noSong = !watching && current === null
+  const disabled = noSong || (!watching && playError !== null)
   const percent = duration > 0 ? (Math.min(time, duration) / duration) * 100 : 0
   const RepeatIcon = repeat === 'one' ? Repeat1 : Repeat
+  const noun = watching ? 'video' : 'song'
 
   return (
     <footer className="player">
       <div className="now">
-        {current !== null && <Cover key={current.path} song={current} className="now-cover" />}
+        {watching && <span className="now-cover video-cover"><Video className="i" aria-hidden /></span>}
+        {!watching && current !== null && <Cover key={current.path} song={current} className="now-cover" />}
         <div className="now-text">
-          {current === null ? <span className="dim">Pick a song to play</span> : <span className="now-title">{current.title}</span>}
-          {current !== null && current.artist !== '' && <span className="now-artist">{current.artist}</span>}
-          {playError !== null && <span className="now-error" role="alert">{playError}</span>}
+          {watching && <span className="now-title">{video.title}</span>}
+          {!watching && (current === null ? <span className="dim">Pick a song to play</span> : <span className="now-title">{current.title}</span>)}
+          {watching && <span className="now-artist">Video in the Download page</span>}
+          {!watching && current !== null && current.artist !== '' && <span className="now-artist">{current.artist}</span>}
+          {!watching && playError !== null && <span className="now-error" role="alert">{playError}</span>}
           {notice !== null && <span className="now-notice" role="status">{notice}</span>}
         </div>
-        {current !== null && <HeartButton path={current.path} title={current.title} className="ctl now-heart" label="Favorite" />}
+        {!watching && current !== null && <HeartButton path={current.path} title={current.title} className="ctl now-heart" label="Favorite" />}
       </div>
       <div className="transport">
         <div className="controls">
           <button
             type="button"
-            className={`ctl${shuffle ? ' on' : ''}`}
+            className={`ctl${shuffle && !watching ? ' on' : ''}`}
             onClick={toggleShuffle}
+            disabled={watching}
             aria-label="Shuffle"
-            aria-pressed={shuffle}
-            title={shuffle ? 'Shuffle is on' : 'Shuffle is off'}
+            aria-pressed={shuffle && !watching}
+            title={watching ? 'Shuffle is for music' : shuffle ? 'Shuffle is on' : 'Shuffle is off'}
           >
             <Shuffle className="i" aria-hidden />
           </button>
-          <button type="button" className="ctl" onClick={previous} disabled={noSong} aria-label="Previous song" title="Previous song">
+          <button type="button" className="ctl" onClick={previous} disabled={noSong || (watching && !video.canPrevious)} aria-label={`Previous ${noun}`} title={`Previous ${noun}`}>
             <SkipBack className="i" aria-hidden />
           </button>
           <button
@@ -858,15 +870,16 @@ function PlayerBar() {
           >
             {playing ? <Pause className="i" aria-hidden /> : <Play className="i" aria-hidden />}
           </button>
-          <button type="button" className="ctl" onClick={next} disabled={noSong} aria-label="Next song" title="Next song">
+          <button type="button" className="ctl" onClick={next} disabled={noSong || (watching && !video.canNext)} aria-label={`Next ${noun}`} title={`Next ${noun}`}>
             <SkipForward className="i" aria-hidden />
           </button>
           <button
             type="button"
-            className={`ctl${repeat === 'off' ? '' : ' on'}`}
+            className={`ctl${repeat === 'off' || watching ? '' : ' on'}`}
             onClick={cycleRepeat}
+            disabled={watching}
             aria-label={`Repeat: ${repeat}`}
-            title={repeat === 'off' ? 'Repeat is off' : repeat === 'all' ? 'Repeating the whole list' : 'Repeating this song'}
+            title={watching ? 'Repeat is for music' : repeat === 'off' ? 'Repeat is off' : repeat === 'all' ? 'Repeating the whole list' : 'Repeating this song'}
           >
             <RepeatIcon className="i" aria-hidden />
           </button>
@@ -875,7 +888,7 @@ function PlayerBar() {
           <span className="clock">{formatTime(time)}</span>
           <input
             type="range"
-            aria-label="Position in the song"
+            aria-label={`Position in the ${noun}`}
             min={0}
             max={duration || 1}
             step={0.1}
@@ -1064,8 +1077,13 @@ function SleepControl() {
 }
 
 function VolumeControl() {
-  const volume = useMusic((state) => state.volume)
-  const muted = useMusic((state) => state.muted)
+  const musicVolume = useMusic((state) => state.volume)
+  const musicMuted = useMusic((state) => state.muted)
+  const source = useMusic((state) => state.source)
+  const video = useMusic((state) => state.video)
+  const watching = source === 'video' && video !== null
+  const volume = watching ? video.volume : musicVolume
+  const muted = watching ? video.muted : musicMuted
   const setVolume = useMusic((state) => state.setVolume)
   const toggleMute = useMusic((state) => state.toggleMute)
   const queueOpen = useMusic((state) => state.queueOpen)

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { DEFAULT_RESTART_AFTER } from '../../shared/choices'
-import type { CreateResult, Library, MediaKey, Play, Preferences, Progress, RepeatMode, Settings, Song, UpdateState } from '../../shared/types'
+import type { CreateResult, Library, MediaKey, Play, Preferences, Progress, RepeatMode, Settings, Song, UpdateState, VideoState } from '../../shared/types'
 import { FAVORITES_VIEW, onlyFavorites, toggled } from './favorites'
 import { heardBetween, mostPlayedSongs, MOST_VIEW, recentSongs, RECENT_VIEW, recordPlay, secondsToCount } from './history'
 import { listOutputs, pickOutput, type OutputDevice } from './output'
@@ -72,6 +72,10 @@ interface MusicState {
   progress: Progress | null
   libraryError: string | null
   current: Song | null
+  /** Which player the bar, the media keys and the taskbar buttons control: the music, or the video in the Download page's browser. */
+  source: 'music' | 'video'
+  /** The video in the browser, or null when there is none. */
+  video: VideoState | null
   playing: boolean
   time: number
   duration: number
@@ -171,6 +175,8 @@ export const useMusic = create<MusicState>((set, get) => ({
   progress: null,
   libraryError: null,
   current: null,
+  source: 'music',
+  video: null,
   playing: false,
   time: 0,
   duration: 0,
@@ -213,6 +219,7 @@ export const useMusic = create<MusicState>((set, get) => ({
     window.brita.onUpdate((update) => set({ update }))
     window.brita.updateState().then((update) => set((state) => (state.update.kind === 'idle' ? { update } : {}))).catch((error: unknown) => console.error('Could not read the update state', error))
     window.brita.onMediaKey(handleMediaKey)
+    window.brita.onVideo(handleVideo)
     window.brita.onLibrary((library) => {
       gotFreshLibrary = true
       set((state) => ({ library, loading: false, current: refreshed(state.current, library) }))
@@ -367,6 +374,10 @@ export const useMusic = create<MusicState>((set, get) => ({
   },
 
   togglePlay() {
+    if (onVideo()) {
+      window.brita.controlVideo({ type: 'toggle' })
+      return
+    }
     const { current, playing, playError } = get()
     if (current === null || playError !== null) return
     if (playing) audio.pause()
@@ -374,11 +385,19 @@ export const useMusic = create<MusicState>((set, get) => ({
   },
 
   next() {
+    if (onVideo()) {
+      window.brita.controlVideo({ type: 'next' })
+      return
+    }
     const song = step(1)
     if (song !== null) load(song, true, false)
   },
 
   previous() {
+    if (onVideo()) {
+      window.brita.controlVideo({ type: 'previous' })
+      return
+    }
     if (get().current === null) return
     if (restartsSong(audio.currentTime, get().prefs.restartAfter)) {
       get().seek(0)
@@ -390,12 +409,20 @@ export const useMusic = create<MusicState>((set, get) => ({
   },
 
   seek(seconds) {
+    if (onVideo()) {
+      window.brita.controlVideo({ type: 'seek', seconds })
+      return
+    }
     audio.currentTime = seconds
     lastTime = seconds
     set({ time: seconds })
   },
 
   setVolume(volume) {
+    if (onVideo()) {
+      window.brita.controlVideo({ type: 'volume', volume })
+      return
+    }
     const clamped = Math.min(Math.max(volume, 0), 1)
     audio.volume = clamped
     if (clamped > 0) audio.muted = false
@@ -404,6 +431,10 @@ export const useMusic = create<MusicState>((set, get) => ({
   },
 
   toggleMute() {
+    if (onVideo()) {
+      window.brita.controlVideo({ type: 'mute' })
+      return
+    }
     if (audio.muted && audio.volume === 0) audio.volume = 0.5
     audio.muted = !audio.muted
     set({ muted: audio.muted, volume: audio.volume })
@@ -810,10 +841,41 @@ function handleMediaKey(key: MediaKey): void {
   if (key === 'play-pause') state.togglePlay()
   else if (key === 'next') state.next()
   else if (key === 'previous') state.previous()
-  else audio.pause()
+  else pauseAll()
 }
 
-audio.addEventListener('play', () => useMusic.setState({ playing: true }))
+/** True while the player bar, the media keys and the taskbar buttons control the video. */
+function onVideo(): boolean {
+  const { source, video } = useMusic.getState()
+  return source === 'video' && video !== null
+}
+
+function pauseAll(): void {
+  audio.pause()
+  if (onVideo()) window.brita.controlVideo({ type: 'pause' })
+}
+
+/** The browser reports its video. A video that starts playing takes over from the music; one that is gone gives the bar back. */
+function handleVideo(video: VideoState | null): void {
+  const before = useMusic.getState().video
+  if (video === null) {
+    useMusic.setState({ video: null, source: 'music' })
+    return
+  }
+  const started = video.playing && before?.playing !== true
+  if (started) {
+    audio.pause()
+    useMusic.setState({ video, source: 'video' })
+    return
+  }
+  useMusic.setState({ video })
+}
+
+audio.addEventListener('play', () => {
+  // A song that starts pauses the video, and the controls go back to the music.
+  if (useMusic.getState().video?.playing === true) window.brita.controlVideo({ type: 'pause' })
+  useMusic.setState({ playing: true, source: 'music' })
+})
 audio.addEventListener('playing', () => { skips = 0 })
 audio.addEventListener('pause', () => {
   cancelFade()
@@ -862,13 +924,19 @@ audio.addEventListener('error', () => {
 /** Every song of a list, in the order of the folders. */
 // ---------- Windows media controls (volume flyout, lock screen) ----------
 
+/** True while the active player (music or video) plays. */
+function activePlaying(): boolean {
+  const state = useMusic.getState()
+  return onVideo() && state.video !== null ? state.video.playing : state.playing
+}
+
 /** Tells Windows what plays, and lets its buttons and the keyboard media keys control the player. */
 function connectMediaSession(): void {
   const session = navigator.mediaSession
   const handlers: Array<[MediaSessionAction, () => void]> = [
-    ['play', () => { if (!useMusic.getState().playing) useMusic.getState().togglePlay() }],
-    ['pause', () => audio.pause()],
-    ['stop', () => audio.pause()],
+    ['play', () => { if (!activePlaying()) useMusic.getState().togglePlay() }],
+    ['pause', pauseAll],
+    ['stop', pauseAll],
     ['nexttrack', () => useMusic.getState().next()],
     ['previoustrack', () => useMusic.getState().previous()],
   ]
@@ -899,11 +967,21 @@ connectMediaSession()
 
 // ---------- Tray menu ----------
 
-/** The tray menu (main process) shows Play or Pause and the song's name, so it is told whenever either changes. */
-useMusic.subscribe((state, before) => {
-  if (state.playing === before.playing && state.current === before.current) return
+/** The tray menu, the taskbar buttons and the mini player (main process) show the active player, so they are told whenever it changes. */
+function reportActive(state: MusicState): void {
+  if (state.source === 'video' && state.video !== null) {
+    window.brita.reportPlayback({ playing: state.video.playing, song: { title: state.video.title, artist: 'Video', path: '' } })
+    return
+  }
   const song = state.current
   window.brita.reportPlayback({ playing: state.playing, song: song === null ? null : { title: song.title, artist: song.artist, path: song.path } })
+}
+
+useMusic.subscribe((state, before) => {
+  const sameSong = state.playing === before.playing && state.current === before.current
+  const sameVideo = state.source === before.source && state.video?.playing === before.video?.playing && state.video?.title === before.video?.title
+  if (sameSong && sameVideo) return
+  reportActive(state)
 })
 
 export function songsInView(library: Library, view: View, favorites: readonly string[], plays: readonly Play[]): Song[] {

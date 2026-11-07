@@ -482,6 +482,12 @@ async function startTestSite() {
   return { server, seen, port: server.address().port }
 }
 
+// The bar follows the video about twice a second, so a button may take a moment to show its new label.
+async function pressWhen(page, label) {
+  await waitFor(page, `${button(label)} !== null`, 3000)
+  await page(press(label))
+}
+
 const downloadLink = `[...document.querySelectorAll('.s-link')].find((item) => item.textContent === 'Download')`
 
 async function checkDownloadPage(page, window) {
@@ -540,14 +546,71 @@ async function checkDownloadPage(page, window) {
     report(await waitFor(page, `document.querySelector('.browse-address').value === ${JSON.stringify(`${root}/three`)}`, 5000), 'a pop-up to an allowed page opens in the same view')
     report(liveWindows().length === 1, 'no extra window was opened', String(liveWindows().length))
 
-    // A playing video stops when the page is left, and the view keeps its page when Chris returns.
+    // Step 20b: the player bar and the media keys control the video, also from other pages.
     await contents.loadURL(`${root}/`)
+    await waitFor(page, `document.querySelector('.browse-address').value === ${JSON.stringify(`${root}/`)}`, 5000)
+    const videoPaused = () => contents.executeJavaScript(`document.getElementById('v').paused`)
+    const videoNow = () => contents.executeJavaScript(`({ time: document.getElementById('v').currentTime, volume: document.getElementById('v').volume, muted: document.getElementById('v').muted })`)
+    const barPlay = (label) => `document.querySelector('.play').getAttribute('aria-label') === ${JSON.stringify(label)}`
     await contents.executeJavaScript(`document.getElementById('v').play()`, true)
-    report(await until(async () => (await contents.executeJavaScript(`!document.getElementById('v').paused`)) === true, 4000), 'the test video plays in the view')
+    report(await until(async () => (await videoPaused()) === false, 4000), 'the test video plays in the view')
+    report(await waitFor(page, `${nowTitle} === 'Test site /' && ${barPlay('Pause')}`, 5000), 'the player bar shows the title of the playing video and Pause', await page(nowTitle))
+    report((await page(`document.querySelector('.now-artist').textContent`)) === 'Video in the Download page', 'the bar says that it is a video')
+    report(await page(`${button('Shuffle')}.disabled && document.querySelector('button[aria-label^="Repeat"]').disabled`), 'shuffle and repeat are switched off for a video')
+    report(await page(`${button('Next video')}.disabled && ${button('Previous video')}.disabled`), 'next and previous are switched off when the page offers none')
+    report(await waitFor(page, `document.querySelectorAll('.clock')[1].textContent === '0:05'`, 4000), 'the bar shows the length of the video', (await page(clocks)).join(' / '))
+    await sleep(2000)
+    report(seconds((await page(clocks))[0]) >= 1, 'the bar shows the running time of the video', (await page(clocks)).join(' / '))
+
+    await pressWhen(page, 'Pause')
+    report(await until(videoPaused, 4000), 'Pause in the bar pauses the video')
+    await pressWhen(page, 'Play')
+    report(await until(async () => (await videoPaused()) === false, 4000), 'Play in the bar plays the video')
+    await setSlider(page, 'input[aria-label="Position in the video"]', 3)
+    report(await until(async () => Math.abs((await videoNow()).time - 3) < 1.2, 3000), 'the seek bar moves the video', JSON.stringify(await videoNow()))
+    await setSlider(page, 'input[aria-label="Volume"]', 0.3)
+    report(await until(async () => Math.abs((await videoNow()).volume - 0.3) < 0.02, 3000), 'the volume slider sets the volume of the video', JSON.stringify(await videoNow()))
+    report(await waitFor(page, `${button('Mute')} !== null`, 3000), 'the bar shows the volume of the video')
+    await pressWhen(page, 'Mute')
+    report(await until(async () => (await videoNow()).muted === true, 3000), 'Mute in the bar mutes the video')
+    await pressWhen(page, 'Unmute')
+    report(await until(async () => (await videoNow()).muted === false, 3000), 'Unmute in the bar unmutes the video')
+
+    window.webContents.send('media:key', 'play-pause')
+    report(await until(videoPaused, 4000), 'the media key pauses the video')
+    window.webContents.send('media:key', 'play-pause')
+    report(await until(async () => (await videoPaused()) === false, 4000), 'the media key plays the video again')
+
+    // Leaving the page keeps the video playing, and the bar still controls it.
     await page(clickNav('All songs'))
     report(await waitFor(page, `document.querySelector('.browse') === null`, 3000), 'another page closes the Download page')
     report(!view.getVisible(), 'the browser view is hidden when the page is left')
-    report(await until(async () => (await contents.executeJavaScript(`document.getElementById('v').paused`)) === true, 3000), 'the video is paused when the page is left')
+    await sleep(700)
+    report((await videoPaused()) === false && (await page(nowTitle)) === 'Test site /', 'the video keeps playing when the page is left, and the bar still shows it')
+    await pressWhen(page, 'Pause')
+    report(await until(videoPaused, 4000), 'Pause in the bar pauses the video from another page')
+    await pressWhen(page, 'Play')
+    report(await until(async () => (await videoPaused()) === false, 4000), 'Play in the bar plays the video from another page')
+
+    // Two sources never play together, and the controls follow the one that played last.
+    const songs = await page(titles)
+    await playAndWait(page, songs[0])
+    report(await until(videoPaused, 4000), 'starting a song pauses the video')
+    report((await page(nowTitle)) === songs[0] && (await page(`${button('Shuffle')}.disabled`)) === false, 'the bar goes back to the song')
+    await pressWhen(page, 'Pause')
+    await sleep(500)
+    report((await videoPaused()) === true && (await page(barPlay('Play'))), 'Pause in the bar now pauses the song, not the video')
+    await page(`${downloadLink}.click()`)
+    await until(() => view.getVisible(), 3000)
+    await contents.executeJavaScript(`document.getElementById('v').play()`, true)
+    report(await waitFor(page, `${nowTitle} === 'Test site /' && ${barPlay('Pause')}`, 5000), 'a video that starts takes the bar over from the song')
+    report((await audioState(window)).paused === true, 'the song is paused when the video starts')
+    await pressWhen(page, 'Pause')
+    await until(videoPaused, 4000)
+    await page(clickNav('All songs'))
+    // Hand the bar back to the music for the checks that follow.
+    await playAndWait(page, songs[0])
+    await pressWhen(page, 'Pause')
     await page(`${downloadLink}.click()`)
     report(await until(() => view.getVisible(), 3000), 'the browser view comes back with the page')
     report(contents.getURL() === `${root}/` && window.contentView.children.filter((child) => child.webContents !== undefined).length === 1, 'it is the same view on the same page, not a new one', contents.getURL())

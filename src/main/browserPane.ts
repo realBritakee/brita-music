@@ -5,7 +5,7 @@ import type { BrowserState } from '../shared/types.ts'
 export interface BrowserPane {
   /** Shows the view at this place in the window, and loads the home page the first time. */
   place(bounds: Bounds): void
-  /** Hides the view and pauses a playing video, so it never plays on behind the music player. */
+  /** Hides the view. A playing video keeps playing; the player bar controls it. */
   hide(): void
   back(): void
   forward(): void
@@ -86,10 +86,8 @@ export function createBrowserPane(window: BrowserWindow, options: BrowserPaneOpt
     },
     hide() {
       if (view === null || view.webContents.isDestroyed()) return
+      // A video keeps playing: the player bar controls it from every page.
       view.setVisible(false)
-      view.webContents
-        .executeJavaScript("document.querySelectorAll('video, audio').forEach((item) => item.pause())")
-        .catch((error: unknown) => console.error('Could not pause the video in the browser view', error))
     },
     back() {
       if (view !== null && view.webContents.navigationHistory.canGoBack()) view.webContents.navigationHistory.goBack()

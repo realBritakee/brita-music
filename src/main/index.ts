@@ -3,6 +3,8 @@ import { realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { HOME_URL, sanitizeBounds } from './browserModel.ts'
 import { createBrowserPane, type BrowserPane } from './browserPane.ts'
+import { sanitizeVideoCommand } from './videoModel.ts'
+import { createVideoRemote, type VideoRemote } from './videoRemote.ts'
 import { serveCover } from './covers.ts'
 import { describeSongs, type KnownMap } from './describe.ts'
 import { handleDrop } from './drop.ts'
@@ -34,6 +36,8 @@ if (!gotLock) {
 let mainWindow: BrowserWindow | null = null
 /** The browser view of the Download page. It belongs to the main window. */
 let browser: BrowserPane | null = null
+/** Reads and controls the video that plays in the browser view. */
+let video: VideoRemote | null = null
 let thumbar: ThumbarController | null = null
 /** Set once the program is really leaving, so closing the window no longer hides it in the tray. */
 let quitting = false
@@ -443,6 +447,10 @@ app.whenReady().then(async () => {
     else if (move === 'reload') browser?.reload()
   })
   ipcMain.handle('browser:go', (event, text: unknown) => fromMainWindow(event.sender) && browser !== null && browser.go(typeof text === 'string' ? text : ''))
+  ipcMain.on('video:command', (event, command: unknown) => {
+    const clean = sanitizeVideoCommand(command)
+    if (fromMainWindow(event.sender) && clean !== null) video?.command(clean)
+  })
   ipcMain.handle('browser:state', () => browser?.state() ?? { url: '', canGoBack: false, canGoForward: false, loading: false })
   ipcMain.handle('app:version', () => app.getVersion())
   ipcMain.handle('update:state', () => updates.state())
@@ -464,6 +472,10 @@ app.whenReady().then(async () => {
       if (!window.isDestroyed()) window.webContents.send('browser:state', state)
     },
   })
+  video = createVideoRemote(() => browser?.contents() ?? null, (state) => {
+    if (!window.isDestroyed()) window.webContents.send('video:state', state)
+  })
+  window.on('closed', () => video?.stop())
   // The music plays in the main window, so a mini player without it would show a song that is gone.
   window.on('closed', () => mini.close())
   thumbar = createThumbar(window, {
