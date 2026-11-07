@@ -1,6 +1,8 @@
 import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, protocol, screen, shell, type WebContents } from 'electron'
 import { realpath } from 'node:fs/promises'
 import path from 'node:path'
+import { HOME_URL, sanitizeBounds } from './browserModel.ts'
+import { createBrowserPane, type BrowserPane } from './browserPane.ts'
 import { serveCover } from './covers.ts'
 import { describeSongs, type KnownMap } from './describe.ts'
 import { handleDrop } from './drop.ts'
@@ -30,6 +32,8 @@ if (!gotLock) {
 }
 
 let mainWindow: BrowserWindow | null = null
+/** The browser view of the Download page. It belongs to the main window. */
+let browser: BrowserPane | null = null
 let thumbar: ThumbarController | null = null
 /** Set once the program is really leaving, so closing the window no longer hides it in the tray. */
 let quitting = false
@@ -424,6 +428,21 @@ app.whenReady().then(async () => {
   const updates = startUpdates((state) => {
     for (const open of BrowserWindow.getAllWindows()) open.webContents.send('update:state', state)
   })
+  const fromMainWindow = (sender: WebContents): boolean => mainWindow !== null && sender === mainWindow.webContents
+  ipcMain.on('browser:place', (event, bounds: unknown) => {
+    const clean = sanitizeBounds(bounds)
+    if (fromMainWindow(event.sender) && clean !== null) browser?.place(clean)
+  })
+  ipcMain.on('browser:hide', (event) => {
+    if (fromMainWindow(event.sender)) browser?.hide()
+  })
+  ipcMain.on('browser:move', (event, move: unknown) => {
+    if (!fromMainWindow(event.sender)) return
+    if (move === 'back') browser?.back()
+    else if (move === 'forward') browser?.forward()
+    else if (move === 'reload') browser?.reload()
+  })
+  ipcMain.handle('browser:state', () => browser?.state() ?? { url: '', canGoBack: false, canGoForward: false, loading: false })
   ipcMain.handle('app:version', () => app.getVersion())
   ipcMain.handle('update:state', () => updates.state())
   ipcMain.handle('update:check', () => updates.check())
@@ -436,6 +455,15 @@ app.whenReady().then(async () => {
   }
   const window = createWindow()
   mainWindow = window
+  // Only the app check may point the view at a local page (and only in a development run, never in the installed program).
+  const testHome = app.isPackaged ? undefined : process.env['BRITA_TEST_BROWSER_HOME']
+  browser = createBrowserPane(window, {
+    home: testHome ?? HOME_URL,
+    testHosts: testHome === undefined ? [] : [new URL(testHome).hostname],
+    onState: (state) => {
+      if (!window.isDestroyed()) window.webContents.send('browser:state', state)
+    },
+  })
   // The music plays in the main window, so a mini player without it would show a song that is gone.
   window.on('closed', () => mini.close())
   thumbar = createThumbar(window, {

@@ -71,6 +71,19 @@
 .head-text { flex: 1; min-width: 0; }
 .view-head h1 { font-size: 36px; overflow-wrap: anywhere; }
 .view-head p { margin-top: 6px; }
+.browse { height: 100%; display: flex; flex-direction: column; }
+.browse-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--raised); }
+.browse-btn { flex: none; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; background: var(--surface); border: 1px solid var(--border); border-radius: var(--rad-sm); color: var(--text); }
+.browse-btn:hover:not(:disabled) { border-color: var(--border-strong); background: var(--surface-hover); }
+.browse-btn:disabled { color: var(--text-3); opacity: 0.5; }
+.browse-btn .i { width: 16px; height: 16px; }
+.browse-btn .spin { animation: spin 1s linear infinite; }
+.browse-address { flex: 1; min-width: 0; padding: 7px 9px; background: var(--bg); color: var(--text-2); border: 1px solid var(--border); border-radius: var(--rad-sm); font-size: 14px; }
+.browse-box { flex: 1; min-height: 0; background: var(--bg); }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .browse-btn .spin { animation: none; } }
+.head-actions { display: flex; gap: 10px; margin-top: 14px; }
+.head-actions .btn .i { width: 16px; height: 16px; }
 .search { flex: none; width: 280px; }
 .search-box { position: relative; display: flex; align-items: center; }
 .search-box > .i { position: absolute; left: 9px; width: 16px; height: 16px; color: var(--text-3); pointer-events: none; }

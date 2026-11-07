@@ -9,6 +9,7 @@ const electron = require('electron')
 const { app, BrowserWindow, dialog, globalShortcut, net } = electron
 const { spawn } = require('node:child_process')
 const fs = require('node:fs')
+const http = require('node:http')
 const os = require('node:os')
 const path = require('node:path')
 const { makeFlac, makeMp3, makeOpus, makePng, makeWav } = require('./make-audio.cjs')
@@ -412,6 +413,136 @@ async function checkShuffle(page) {
   const sameSongs = JSON.stringify([...played].sort()) === JSON.stringify([...list].sort())
   report(played[0] === list[0] && sameSongs && JSON.stringify(played) !== JSON.stringify(list), 'shuffle plays every song once, in a different order', played.join(', '))
   await page(press('Shuffle'))
+}
+
+// The Play and Shuffle buttons in the list header.
+const headButton = (name) => `[...document.querySelectorAll('.head-actions button')].find((item) => item.textContent.trim() === ${JSON.stringify(name)})`
+
+async function checkPlayList(page) {
+  const list = await page(titles)
+  report((await page(`[...document.querySelectorAll('.head-actions button')].map((item) => item.textContent.trim()).join(',')`)) === 'Play,Shuffle', 'the list header has a Play and a Shuffle button')
+
+  await page(`${headButton('Shuffle')}.click()`)
+  await sleep(200)
+  report((await page(`${button('Shuffle')}.getAttribute('aria-pressed')`)) === 'true', 'the header Shuffle button turns the shuffle button in the player bar on')
+  const played = [await page(nowTitle)]
+  for (let i = 1; i < list.length; i++) {
+    await page(press('Next song'))
+    await sleep(120)
+    played.push(await page(nowTitle))
+  }
+  const sameSongs = JSON.stringify([...played].sort()) === JSON.stringify([...list].sort())
+  report(sameSongs, 'header Shuffle plays every song of the list once', played.join(', '))
+
+  await page(`${headButton('Play')}.click()`)
+  await sleep(200)
+  report((await page(`${button('Shuffle')}.getAttribute('aria-pressed')`)) === 'false', 'the header Play button turns the shuffle off')
+  report((await page(nowTitle)) === list[0], 'header Play starts with the first song of the list', await page(nowTitle))
+  const inOrder = await nextTitles(page, list.length - 1)
+  report(JSON.stringify(inOrder) === JSON.stringify(list.slice(1)), 'header Play plays the list in order', inOrder.join(', '))
+}
+
+// Step 20: the Download page with its browser view. A local test site stands in for youtube.com; the app is told to
+// accept only the host 127.0.0.1 for this (the start page address is set at the top of the run). "localhost" is a
+// different host to the app, so it plays the part of "any other website".
+function silentWav() {
+  const samples = 8000 * 5
+  const header = Buffer.alloc(44)
+  header.write('RIFF', 0)
+  header.writeUInt32LE(36 + samples, 4)
+  header.write('WAVEfmt ', 8)
+  header.writeUInt32LE(16, 16)
+  header.writeUInt16LE(1, 20)
+  header.writeUInt16LE(1, 22)
+  header.writeUInt32LE(8000, 24)
+  header.writeUInt32LE(8000, 28)
+  header.writeUInt16LE(1, 32)
+  header.writeUInt16LE(8, 34)
+  header.write('data', 36)
+  header.writeUInt32LE(samples, 40)
+  return Buffer.concat([header, Buffer.alloc(samples, 128)])
+}
+
+async function startTestSite() {
+  const seen = []
+  const clip = silentWav()
+  const server = http.createServer((request, response) => {
+    seen.push(`${request.headers.host} ${request.url}`)
+    if (request.url === '/clip.wav') {
+      response.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': clip.length })
+      response.end(clip)
+      return
+    }
+    response.writeHead(200, { 'Content-Type': 'text/html' })
+    response.end(`<title>Test site ${request.url}</title><body><a id="two" href="/two">two</a>
+      <a id="blocked" href="http://localhost:${server.address().port}/blocked">other site</a>
+      <video id="v" src="/clip.wav" loop></video></body>`)
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  return { server, seen, port: server.address().port }
+}
+
+const downloadLink = `[...document.querySelectorAll('.s-link')].find((item) => item.textContent === 'Download')`
+
+async function checkDownloadPage(page, window) {
+  const site = await startTestSite()
+  try {
+    const root = `http://127.0.0.1:${site.port}`
+    report(await page(`document.querySelector('.browse') === null`), 'the Download page is closed at first')
+    report((await page(`${downloadLink}.textContent`)) === 'Download', 'the sidebar has a Download entry')
+    await page(`${downloadLink}.click()`)
+    report(await waitFor(page, `document.querySelector('.browse') !== null`, 3000), 'the Download entry opens the Download page')
+    const viewOf = () => window.contentView.children.find((child) => child.webContents !== undefined)
+    report(await until(() => viewOf() !== undefined, 5000), 'the page puts a browser view into the window')
+    const view = viewOf()
+    const contents = view.webContents
+    contents.setAudioMuted(true)
+    report(view.getVisible(), 'the browser view is visible on the Download page')
+    const box = await page(`(() => { const r = document.querySelector('.browse-box').getBoundingClientRect(); return { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height) } })()`)
+    const placed = view.getBounds()
+    const closeEnough = ['x', 'y', 'width', 'height'].every((key) => Math.abs(placed[key] - box[key]) <= 1)
+    report(closeEnough, 'the browser view lies exactly over the page area', `view ${JSON.stringify(placed)} | area ${JSON.stringify(box)}`)
+
+    await contents.loadURL(`${root}/`)
+    report(await waitFor(page, `document.querySelector('.browse-address').value === ${JSON.stringify(`${root}/`)}`, 5000), 'the address bar shows the page the view is on')
+    report(await page(`document.querySelector('button[aria-label="Back"]').disabled`), 'Back is switched off at the first page')
+
+    await contents.executeJavaScript(`document.getElementById('two').click()`, true)
+    report(await waitFor(page, `document.querySelector('.browse-address').value === ${JSON.stringify(`${root}/two`)}`, 5000), 'a link inside the allowed host opens in the view')
+    report(await waitFor(page, `!document.querySelector('button[aria-label="Back"]').disabled`, 3000), 'Back is switched on after a second page')
+    await page(press('Back'))
+    report(await waitFor(page, `document.querySelector('.browse-address').value === ${JSON.stringify(`${root}/`)}`, 5000), 'Back goes to the first page')
+    report(await waitFor(page, `!document.querySelector('button[aria-label="Forward"]').disabled`, 3000), 'Forward is switched on after going back')
+    await page(press('Forward'))
+    report(await waitFor(page, `document.querySelector('.browse-address').value === ${JSON.stringify(`${root}/two`)}`, 5000), 'Forward goes to the second page')
+
+    // Other websites do nothing: no click, no pop-up and no redirect reaches them.
+    await contents.loadURL(`${root}/`)
+    await contents.executeJavaScript(`document.getElementById('blocked').click()`, true)
+    await sleep(800)
+    report(contents.getURL() === `${root}/` && !site.seen.some((line) => line.startsWith('localhost')), 'a link to another website does nothing', `${contents.getURL()} | ${site.seen.join(', ')}`)
+    await contents.executeJavaScript(`window.open('http://localhost:${site.port}/popup')`, true)
+    await sleep(800)
+    report(!site.seen.some((line) => line.startsWith('localhost')) && contents.getURL() === `${root}/`, 'a pop-up to another website does nothing')
+    await contents.executeJavaScript(`window.open('${root}/three')`, true)
+    report(await waitFor(page, `document.querySelector('.browse-address').value === ${JSON.stringify(`${root}/three`)}`, 5000), 'a pop-up to an allowed page opens in the same view')
+    report(liveWindows().length === 1, 'no extra window was opened', String(liveWindows().length))
+
+    // A playing video stops when the page is left, and the view keeps its page when Chris returns.
+    await contents.loadURL(`${root}/`)
+    await contents.executeJavaScript(`document.getElementById('v').play()`, true)
+    report(await until(async () => (await contents.executeJavaScript(`!document.getElementById('v').paused`)) === true, 4000), 'the test video plays in the view')
+    await page(clickNav('All songs'))
+    report(await waitFor(page, `document.querySelector('.browse') === null`, 3000), 'another page closes the Download page')
+    report(!view.getVisible(), 'the browser view is hidden when the page is left')
+    report(await until(async () => (await contents.executeJavaScript(`document.getElementById('v').paused`)) === true, 3000), 'the video is paused when the page is left')
+    await page(`${downloadLink}.click()`)
+    report(await until(() => view.getVisible(), 3000), 'the browser view comes back with the page')
+    report(contents.getURL() === `${root}/` && window.contentView.children.filter((child) => child.webContents !== undefined).length === 1, 'it is the same view on the same page, not a new one', contents.getURL())
+  } finally {
+    await page(clickNav('All songs'))
+    site.server.close()
+  }
 }
 
 // Step 9: the "Playing next" panel.
@@ -1438,7 +1569,7 @@ const sidebar = `[...document.querySelectorAll('.s-item')].map((item) => item.te
 
 // Step 8: the music folders live on the settings page, opened with the gear button in the sidebar.
 const onSettings = `document.querySelector('.settings') !== null`
-const gear = `document.querySelector('.s-link')`
+const gear = `[...document.querySelectorAll('.s-link')].find((item) => item.textContent === 'Settings')`
 const addFolderClick = `[...document.querySelectorAll('.settings .btn')].find((item) => item.textContent.includes('Add folder')).click()`
 
 async function openSettings(page) {
@@ -1803,7 +1934,7 @@ async function checkSettingsPage(page, window) {
       title: document.querySelector('.settings h1')?.textContent,
       selects: document.querySelectorAll('.settings select').length,
       above: ['setting-start', 'setting-restart', 'setting-shuffle', 'setting-repeat', 'setting-close'].every(above),
-      gearOn: document.querySelector('.s-link')?.classList.contains('on') === true,
+      gearOn: [...document.querySelectorAll('.s-link')].find((item) => item.textContent === 'Settings')?.classList.contains('on') === true,
       listsOn: document.querySelectorAll('.s-item.on').length,
       dataPath: document.querySelector('.data-path')?.textContent ?? '',
       values: ${choiceValues},
@@ -2419,6 +2550,7 @@ async function firstStart(page) {
   await guard('autoplay', () => checkAutoplay(page))
   await guard('repeat', () => checkRepeat(page))
   await guard('shuffle', () => checkShuffle(page))
+  await guard('play list buttons', () => checkPlayList(page))
   await guard('queue', () => checkQueue(page))
   await guard('song menu', () => checkSongMenu(page))
   await guard('favorites', () => checkFavorites(page))
@@ -2440,6 +2572,7 @@ async function firstStart(page) {
   await guard('second folder cleanup', () => removeSecondFolder(page))
   await guard('drag and drop', () => checkDragAndDrop(page, window0))
   await guard('settings page', () => checkSettingsPage(page, window0))
+  await guard('download page', () => checkDownloadPage(page, window0))
   await guard('thumbnail buttons', () => checkThumbar(page, window0))
   await guard('mini player', () => checkMiniPlayer(page, window0))
   await guard('tray', () => checkTray(page, window0))
@@ -2584,6 +2717,9 @@ function finish(code) {
 const created = new Promise((resolve) => app.once('browser-window-created', (_event, window) => resolve(window)))
 if (again) changeThingsWhileClosed()
 const startedAt = Date.now()
+// Step 20: the Download page must never reach youtube.com in a check. Its start page is a closed local port, and the app accepts the host
+// 127.0.0.1 for this run only (it ignores this setting in the installed program). The check loads its own test site into the view.
+process.env.BRITA_TEST_BROWSER_HOME = 'http://127.0.0.1:49999/'
 // BRITA_MAIN points the check at the packed program (`dist/win-unpacked/resources/app.asar/out/main/index.js`) instead of `out/`.
 require(process.env.BRITA_MAIN ?? path.join(__dirname, '../out/main/index.js'))
 

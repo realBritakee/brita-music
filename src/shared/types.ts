@@ -116,6 +116,24 @@ export type UpdateState =
   | { kind: 'ready'; version: string }
   | { kind: 'error'; message: string }
 
+/** What the Download page's browser view shows right now. `url` is empty before the view has started. */
+export interface BrowserState {
+  url: string
+  canGoBack: boolean
+  canGoForward: boolean
+  loading: boolean
+}
+
+/** A rectangle in window pixels: where the browser view sits on the Download page. */
+export interface BrowserBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export type BrowserMove = 'back' | 'forward' | 'reload'
+
 export interface BritaApi {
   /** The remembered library, at once. The fresh one follows through onLibrary. */
   loadLibrary(): Promise<Library>
@@ -157,6 +175,14 @@ export interface BritaApi {
   /** Closes the program, installs the downloaded version and starts it again. */
   installUpdate(): Promise<void>
   onUpdate(listener: (state: UpdateState) => void): () => void
+  /** Shows the browser view at this place in the window (the first call opens youtube.com). Call again when the place changes. */
+  placeBrowser(bounds: BrowserBounds): void
+  /** Hides the browser view and pauses its video. */
+  hideBrowser(): void
+  /** Back, forward or reload in the browser view. */
+  moveBrowser(move: BrowserMove): void
+  browserState(): Promise<BrowserState>
+  onBrowser(listener: (state: BrowserState) => void): () => void
   /** Tells the tray menu, the taskbar and the mini player whether music plays and which song is loaded. */
   reportPlayback(report: PlaybackReport): void
   /** Opens the mini player, or brings it forward if it is open. */

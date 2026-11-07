@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
-  ArrowDown, ArrowUp, ArrowUpToLine, Check, Copy, Disc3, FolderOpen, FolderPlus, Heart, History, Library as LibraryIcon, ListEnd, ListMusic, ListOrdered, ListPlus, Music,
+  ArrowDown, ArrowUp, ArrowUpToLine, Check, Copy, Disc3, Download as DownloadIcon, FolderOpen, FolderPlus, Heart, History, Library as LibraryIcon, ListEnd, ListMusic, ListOrdered, ListPlus, Music,
   Moon, Pause, PictureInPicture2, Play, RefreshCw, Repeat, Repeat1, Search, Settings as SettingsIcon, Shuffle, SkipBack, SkipForward, Speaker, User, Volume1, Volume2,
   TrendingUp, VolumeX, X, type LucideIcon,
 } from 'lucide-react'
@@ -10,6 +10,7 @@ import { MOST_VIEW, RECENT_VIEW } from './history'
 import { folderLabels } from './queue'
 import type { SortKey } from './search'
 import { SLEEP_MINUTES, sleepLabel, sleepTitle } from './sleep'
+import { DownloadPage } from './Download'
 import { AddFolderButton, SettingsPage, UpdateActions, updateText } from './Settings'
 import { songsInView, useMusic, visibleSongs } from './store'
 import { formatTime } from './time'
@@ -67,7 +68,7 @@ function UpdateBanner() {
   const postponeUpdate = useMusic((state) => state.postponeUpdate)
   const page = useMusic((state) => state.page)
   const show = update.kind === 'available' || update.kind === 'downloading' || update.kind === 'ready'
-  if (!show || update.version === later || page === 'settings') return null
+  if (!show || update.version === later || page !== 'library') return null
   return (
     <div className="update-bar" role="status">
       <div className="update-bar-text">
@@ -175,7 +176,9 @@ export function App() {
           </div>
         )}
         <UpdateBanner />
-        {page === 'settings' ? <SettingsPage /> : hasFolder || loading ? <SongList /> : <FirstStart />}
+        {page === 'settings' && <SettingsPage />}
+        {page === 'download' && <DownloadPage />}
+        {page === 'library' && (hasFolder || loading ? <SongList /> : <FirstStart />)}
       </main>
       {queueOpen && <QueuePanel />}
       <PlayerBar />
@@ -428,6 +431,7 @@ function Sidebar({ dragging }: { dragging: boolean }) {
   const setPage = useMusic((state) => state.setPage)
   const inLibrary = page === 'library'
   const inSettings = page === 'settings'
+  const inDownload = page === 'download'
 
   return (
     <aside className="side">
@@ -478,6 +482,15 @@ function Sidebar({ dragging }: { dragging: boolean }) {
         ))}
       </nav>
       <div className="side-foot">
+        <button
+          type="button"
+          className={`s-link${inDownload ? ' on' : ''}`}
+          aria-current={inDownload ? 'page' : undefined}
+          onClick={() => setPage(inDownload ? 'library' : 'download')}
+        >
+          <DownloadIcon className="i" aria-hidden />
+          <span className="s-name">Download</span>
+        </button>
         <button
           type="button"
           className={`s-link${inSettings ? ' on' : ''}`}
@@ -672,6 +685,7 @@ function SongList() {
   const current = useMusic((state) => state.current)
   const playing = useMusic((state) => state.playing)
   const playFrom = useMusic((state) => state.playFrom)
+  const playList = useMusic((state) => state.playList)
   const setQuery = useMusic((state) => state.setQuery)
   const libraryError = useMusic((state) => state.libraryError)
   const loading = useMusic((state) => state.loading)
@@ -712,6 +726,16 @@ function SongList() {
             {countText}
             {progress !== null && <span className="reading" role="status"> · Reading song details: {progress.done} of {progress.total}</span>}
           </p>
+          {songs.length > 0 && (
+            <div className="head-actions">
+              <button type="button" className="btn btn-primary" onClick={() => playList(songs, false)}>
+                <Play className="i" aria-hidden /> Play
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => playList(songs, true)}>
+                <Shuffle className="i" aria-hidden /> Shuffle
+              </button>
+            </div>
+          )}
         </div>
         <SearchBox total={all.length} />
       </header>

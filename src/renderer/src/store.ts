@@ -13,7 +13,7 @@ import { fadeFactor, FADE_SECONDS, secondsLeft, sleepAfter, SLEEP_OFF, type Slee
 export type View = 'all' | string
 
 /** The two screens of the window: the song list, or the settings. */
-export type Page = 'library' | 'settings'
+export type Page = 'library' | 'settings' | 'download'
 
 const EMPTY_LIBRARY: Library = { folders: [], playlists: [], songs: [], unreadable: [], missing: [] }
 const DEFAULT_PREFERENCES: Preferences = { startPlaying: false, restartAfter: DEFAULT_RESTART_AFTER, shuffleAtStart: 'remember', repeatAtStart: 'remember', closeToTray: false }
@@ -136,6 +136,8 @@ interface MusicState {
   toggleSort(key: SortKey): void
   /** Plays a song; the songs after it are the rest of `list`. */
   playFrom(song: Song, list: Song[]): void
+  /** Plays a whole list: in order from its first song, or shuffled from a random one. Sets the shuffle button to match. */
+  playList(list: Song[], shuffle: boolean): void
   togglePlay(): void
   next(): void
   previous(): void
@@ -353,6 +355,15 @@ export const useMusic = create<MusicState>((set, get) => ({
   playFrom(song, list) {
     setQueue(list.map((item) => item.path), song.path)
     load(song, true, false)
+  },
+
+  playList(list, shuffle) {
+    if (list.length === 0) return
+    const first = shuffle ? list[Math.floor(Math.random() * list.length)] : list[0]
+    set({ shuffle })
+    setQueue(list.map((item) => item.path), first.path)
+    load(first, true, false)
+    saveSoon()
   },
 
   togglePlay() {

@@ -2,7 +2,7 @@
   "name": "brita-music",
   "productName": "Brita Music",
   "private": true,
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "A desktop player for your own music files. Folders are playlists.",
   "author": "Britakee Studios",
   "main": "./out/main/index.js",
