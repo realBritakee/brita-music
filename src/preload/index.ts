@@ -32,6 +32,7 @@ const api: BritaApi = {
   placeBrowser: (bounds) => ipcRenderer.send('browser:place', bounds),
   hideBrowser: () => ipcRenderer.send('browser:hide'),
   moveBrowser: (move) => ipcRenderer.send('browser:move', move),
+  goBrowser: (text) => ipcRenderer.invoke('browser:go', text),
   browserState: () => ipcRenderer.invoke('browser:state'),
   onBrowser: (listener) => listen('browser:state', listener),
   reportPlayback: (report) => ipcRenderer.send('player:state', report),

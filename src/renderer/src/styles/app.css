@@ -78,7 +78,10 @@
 .browse-btn:disabled { color: var(--text-3); opacity: 0.5; }
 .browse-btn .i { width: 16px; height: 16px; }
 .browse-btn .spin { animation: spin 1s linear infinite; }
+.browse-form { flex: 1; min-width: 0; display: flex; }
 .browse-address { flex: 1; min-width: 0; padding: 7px 9px; background: var(--bg); color: var(--text-2); border: 1px solid var(--border); border-radius: var(--rad-sm); font-size: 14px; }
+.browse-address:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; color: var(--text); }
+.browse-address[aria-invalid="true"] { border-color: var(--err); }
 .browse-box { flex: 1; min-height: 0; background: var(--bg); }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .browse-btn .spin { animation: none; } }

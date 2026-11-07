@@ -1,5 +1,5 @@
 import { session, WebContentsView, type BrowserWindow, type Session } from 'electron'
-import { isAllowedAddress, type Bounds } from './browserModel.ts'
+import { isAllowedAddress, resolveTypedAddress, type Bounds } from './browserModel.ts'
 import type { BrowserState } from '../shared/types.ts'
 
 export interface BrowserPane {
@@ -10,6 +10,8 @@ export interface BrowserPane {
   back(): void
   forward(): void
   reload(): void
+  /** Opens a typed address (or searches YouTube for typed words). False when the text cannot be opened. */
+  go(text: string): boolean
   state(): BrowserState
   isVisible(): boolean
   /** The view's page, for the app check. Null before the first show. */
@@ -18,8 +20,6 @@ export interface BrowserPane {
 
 export interface BrowserPaneOptions {
   home: string
-  /** Extra hosts the view may open. Only the app check passes any. */
-  testHosts: readonly string[]
   onState(state: BrowserState): void
 }
 
@@ -33,11 +33,11 @@ function lockSession(ses: Session): void {
   ses.on('will-download', (event) => event.preventDefault())
 }
 
-/** A real browser view on youtube.com inside the main window, limited to YouTube and Google's sign-in pages. */
+/** A real browser view inside the main window. It starts on youtube.com and may open any web page, but nothing else. */
 export function createBrowserPane(window: BrowserWindow, options: BrowserPaneOptions): BrowserPane {
   let view: WebContentsView | null = null
   let loading = false
-  const allowed = (url: string): boolean => isAllowedAddress(url, options.testHosts)
+  const allowed = (url: string): boolean => isAllowedAddress(url)
 
   function state(): BrowserState {
     if (view === null || view.webContents.isDestroyed()) return { url: '', canGoBack: false, canGoForward: false, loading: false }
@@ -99,6 +99,12 @@ export function createBrowserPane(window: BrowserWindow, options: BrowserPaneOpt
     },
     reload() {
       if (view !== null) view.webContents.reload()
+    },
+    go(text) {
+      const address = resolveTypedAddress(text)
+      if (address === null || view === null) return false
+      view.webContents.loadURL(address).catch((error: unknown) => console.error('Could not open the typed address', error))
+      return true
     },
     state,
     isVisible: () => view !== null && view.getVisible(),

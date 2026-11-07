@@ -443,8 +443,8 @@ async function checkPlayList(page) {
 }
 
 // Step 20: the Download page with its browser view. A local test site stands in for youtube.com; the app is told to
-// accept only the host 127.0.0.1 for this (the start page address is set at the top of the run). "localhost" is a
-// different host to the app, so it plays the part of "any other website".
+// use a local server. The start page address is set at the top of the run, so the check never reaches youtube.com.
+// "localhost" and "127.0.0.1" are two different hosts, so they play the part of two websites.
 function silentWav() {
   const samples = 8000 * 5
   const header = Buffer.alloc(44)
@@ -475,7 +475,7 @@ async function startTestSite() {
     }
     response.writeHead(200, { 'Content-Type': 'text/html' })
     response.end(`<title>Test site ${request.url}</title><body><a id="two" href="/two">two</a>
-      <a id="blocked" href="http://localhost:${server.address().port}/blocked">other site</a>
+      <a id="blocked" href="file:///C:/Windows/win.ini">a file on the PC</a>
       <video id="v" src="/clip.wav" loop></video></body>`)
   })
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
@@ -516,14 +516,26 @@ async function checkDownloadPage(page, window) {
     await page(press('Forward'))
     report(await waitFor(page, `document.querySelector('.browse-address').value === ${JSON.stringify(`${root}/two`)}`, 5000), 'Forward goes to the second page')
 
-    // Other websites do nothing: no click, no pop-up and no redirect reaches them.
+    // A link or pop-up to a file on the PC does nothing. Any web address works, and the address bar takes typed addresses.
     await contents.loadURL(`${root}/`)
     await contents.executeJavaScript(`document.getElementById('blocked').click()`, true)
     await sleep(800)
-    report(contents.getURL() === `${root}/` && !site.seen.some((line) => line.startsWith('localhost')), 'a link to another website does nothing', `${contents.getURL()} | ${site.seen.join(', ')}`)
-    await contents.executeJavaScript(`window.open('http://localhost:${site.port}/popup')`, true)
+    report(contents.getURL() === `${root}/`, 'a link to a file on the PC does nothing', contents.getURL())
+    await contents.executeJavaScript(`window.open('file:///C:/Windows/win.ini')`, true)
     await sleep(800)
-    report(!site.seen.some((line) => line.startsWith('localhost')) && contents.getURL() === `${root}/`, 'a pop-up to another website does nothing')
+    report(contents.getURL() === `${root}/`, 'a pop-up to a file on the PC does nothing', contents.getURL())
+    const typeAddress = (text) => page(`(() => { const input = document.querySelector('.browse-address'); input.focus(); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(text)}); input.dispatchEvent(new Event('input', { bubbles: true })); input.form.requestSubmit() })()`)
+    await typeAddress(`http://localhost:${site.port}/typed`)
+    report(await waitFor(page, `document.querySelector('.browse-address').value === ${JSON.stringify(`http://localhost:${site.port}/typed`)}`, 5000), 'a typed web address on another host opens in the view')
+    report(await until(() => site.seen.some((line) => line.startsWith('localhost') && line.endsWith('/typed')), 5000) && await until(() => contents.getURL() === `http://localhost:${site.port}/typed`, 5000), 'the typed address really reached its server and the view is on it', contents.getURL())
+    await contents.loadURL(`${root}/`)
+    await waitFor(page, `document.querySelector('.browse-address').value === ${JSON.stringify(`${root}/`)}`, 5000)
+    await typeAddress('file:///C:/Windows/win.ini')
+    report(await waitFor(page, `document.querySelector('.browse .message.warn') !== null`, 3000), 'a typed file address is refused with a message')
+    report(contents.getURL() === `${root}/`, 'the view stays where it was after a refused address', contents.getURL())
+    // A new page replaces the typed text and the message.
+    await contents.loadURL(`${root}/two`)
+    report(await waitFor(page, `document.querySelector('.browse-address').value === ${JSON.stringify(`${root}/two`)} && document.querySelector('.browse .message.warn') === null`, 5000), 'a new page replaces the typed text and hides the message')
     await contents.executeJavaScript(`window.open('${root}/three')`, true)
     report(await waitFor(page, `document.querySelector('.browse-address').value === ${JSON.stringify(`${root}/three`)}`, 5000), 'a pop-up to an allowed page opens in the same view')
     report(liveWindows().length === 1, 'no extra window was opened', String(liveWindows().length))
@@ -2717,8 +2729,8 @@ function finish(code) {
 const created = new Promise((resolve) => app.once('browser-window-created', (_event, window) => resolve(window)))
 if (again) changeThingsWhileClosed()
 const startedAt = Date.now()
-// Step 20: the Download page must never reach youtube.com in a check. Its start page is a closed local port, and the app accepts the host
-// 127.0.0.1 for this run only (it ignores this setting in the installed program). The check loads its own test site into the view.
+// Step 20: the Download page must never reach youtube.com in a check. Its start page is a closed local port, and the check loads its own test site into the view.
+// The app ignores this setting in the installed program.
 process.env.BRITA_TEST_BROWSER_HOME = 'http://127.0.0.1:49999/'
 // BRITA_MAIN points the check at the packed program (`dist/win-unpacked/resources/app.asar/out/main/index.js`) instead of `out/`.
 require(process.env.BRITA_MAIN ?? path.join(__dirname, '../out/main/index.js'))

@@ -1,45 +1,49 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { HOME_URL, isAllowedAddress, sanitizeBounds } from '../src/main/browserModel.ts'
+import { HOME_URL, isAllowedAddress, resolveTypedAddress, sanitizeBounds } from '../src/main/browserModel.ts'
 
-test('the start page and normal YouTube pages are allowed', () => {
+test('any web page is allowed, on http or https', () => {
   assert.equal(isAllowedAddress(HOME_URL), true)
   assert.equal(isAllowedAddress('https://www.youtube.com/watch?v=abc123'), true)
-  assert.equal(isAllowedAddress('https://music.youtube.com/'), true)
-  assert.equal(isAllowedAddress('https://youtube.com/results?search_query=song'), true)
-  assert.equal(isAllowedAddress('https://youtu.be/abc123'), true)
+  assert.equal(isAllowedAddress('https://example.com/some/page'), true)
+  assert.equal(isAllowedAddress('http://example.com:8080/'), true)
+  assert.equal(isAllowedAddress('http://127.0.0.1:5555/'), true)
 })
 
-test("Google's sign-in and consent pages are allowed", () => {
-  assert.equal(isAllowedAddress('https://accounts.google.com/ServiceLogin'), true)
-  assert.equal(isAllowedAddress('https://consent.google.com/m?continue=https://www.youtube.com'), true)
-})
-
-test('other sites, look-alike names and other google pages are blocked', () => {
-  assert.equal(isAllowedAddress('https://example.com/'), false)
-  assert.equal(isAllowedAddress('https://www.google.com/'), false)
-  assert.equal(isAllowedAddress('https://evilyoutube.com/'), false)
-  assert.equal(isAllowedAddress('https://youtube.com.evil.example/'), false)
-  assert.equal(isAllowedAddress('https://notyoutu.be/'), false)
-})
-
-test('plain http, odd ports, logins in the address and other schemes are blocked', () => {
-  assert.equal(isAllowedAddress('http://www.youtube.com/'), false)
-  assert.equal(isAllowedAddress('https://www.youtube.com:8443/'), false)
-  assert.equal(isAllowedAddress('https://user:pass@www.youtube.com/'), false)
+test('files, scripts, the app addresses and bad text are refused', () => {
   assert.equal(isAllowedAddress('file:///C:/Windows/win.ini'), false)
   assert.equal(isAllowedAddress('javascript:alert(1)'), false)
+  assert.equal(isAllowedAddress('data:text/html,hi'), false)
   assert.equal(isAllowedAddress('brita-media://song/x'), false)
+  assert.equal(isAllowedAddress('chrome://settings'), false)
+  assert.equal(isAllowedAddress('ftp://example.com/'), false)
   assert.equal(isAllowedAddress('not an address'), false)
   assert.equal(isAllowedAddress(''), false)
   assert.equal(isAllowedAddress(undefined), false)
 })
 
-test('test hosts are allowed only when given, and only for the app check', () => {
-  assert.equal(isAllowedAddress('http://127.0.0.1:5555/'), false)
-  assert.equal(isAllowedAddress('http://127.0.0.1:5555/', ['127.0.0.1']), true)
-  assert.equal(isAllowedAddress('http://localhost:5555/', ['127.0.0.1']), false)
-  assert.equal(isAllowedAddress('ftp://127.0.0.1/', ['127.0.0.1']), false)
+test('typed web addresses open as they are, and https is added when missing', () => {
+  assert.equal(resolveTypedAddress('https://example.com/a'), 'https://example.com/a')
+  assert.equal(resolveTypedAddress('http://example.com'), 'http://example.com/')
+  assert.equal(resolveTypedAddress('example.com'), 'https://example.com/')
+  assert.equal(resolveTypedAddress('  www.youtube.com/watch?v=abc  '), 'https://www.youtube.com/watch?v=abc')
+  assert.equal(resolveTypedAddress('localhost:3000/x'), 'https://localhost:3000/x')
+  assert.equal(resolveTypedAddress('192.168.1.5:8080'), 'https://192.168.1.5:8080/')
+})
+
+test('other typed words are searched on YouTube', () => {
+  assert.equal(resolveTypedAddress('the white buffalo'), `${HOME_URL}results?search_query=the%20white%20buffalo`)
+  assert.equal(resolveTypedAddress('song'), `${HOME_URL}results?search_query=song`)
+  assert.equal(resolveTypedAddress('ac/dc back in black'), `${HOME_URL}results?search_query=ac%2Fdc%20back%20in%20black`)
+})
+
+test('typed text that is not a web page is refused', () => {
+  assert.equal(resolveTypedAddress('file:///C:/Windows/win.ini'), null)
+  assert.equal(resolveTypedAddress('javascript:alert(1)'), null)
+  assert.equal(resolveTypedAddress('brita-media://song/x'), null)
+  assert.equal(resolveTypedAddress('   '), null)
+  assert.equal(resolveTypedAddress(''), null)
+  assert.equal(resolveTypedAddress(42), null)
 })
 
 test('bounds are rounded and bad ones are refused', () => {

@@ -181,6 +181,8 @@ export interface BritaApi {
   hideBrowser(): void
   /** Back, forward or reload in the browser view. */
   moveBrowser(move: BrowserMove): void
+  /** Opens the typed text in the browser view: a web address as it is, other words as a YouTube search. False if it cannot be opened. */
+  goBrowser(text: string): Promise<boolean>
   browserState(): Promise<BrowserState>
   onBrowser(listener: (state: BrowserState) => void): () => void
   /** Tells the tray menu, the taskbar and the mini player whether music plays and which song is loaded. */

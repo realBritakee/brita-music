@@ -442,6 +442,7 @@ app.whenReady().then(async () => {
     else if (move === 'forward') browser?.forward()
     else if (move === 'reload') browser?.reload()
   })
+  ipcMain.handle('browser:go', (event, text: unknown) => fromMainWindow(event.sender) && browser !== null && browser.go(typeof text === 'string' ? text : ''))
   ipcMain.handle('browser:state', () => browser?.state() ?? { url: '', canGoBack: false, canGoForward: false, loading: false })
   ipcMain.handle('app:version', () => app.getVersion())
   ipcMain.handle('update:state', () => updates.state())
@@ -455,11 +456,10 @@ app.whenReady().then(async () => {
   }
   const window = createWindow()
   mainWindow = window
-  // Only the app check may point the view at a local page (and only in a development run, never in the installed program).
+  // Only the app check may change the start page (and only in a development run, never in the installed program).
   const testHome = app.isPackaged ? undefined : process.env['BRITA_TEST_BROWSER_HOME']
   browser = createBrowserPane(window, {
     home: testHome ?? HOME_URL,
-    testHosts: testHome === undefined ? [] : [new URL(testHome).hostname],
     onState: (state) => {
       if (!window.isDestroyed()) window.webContents.send('browser:state', state)
     },
